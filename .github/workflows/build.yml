@@ -35,6 +35,16 @@ jobs:
         libncurses-dev cmake \
         libffi-dev libssl-dev
 
+    # ➕ Paso nuevo: preparar Android SDK con licencias aceptadas
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+      with:
+        api-level: 34
+        build-tools: 34.0.0
+
+    # ➕ Compilación usando el SDK ya instalado
     - name: Compilar APK
+      env:
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk   # ruta donde setup-android lo instala
       run: |
         buildozer android debug
