@@ -30,15 +30,18 @@ jobs:
     - name: Instalar dependencias del sistema
       run: |
         sudo apt update
-        sudo apt install -y zip unzip git openjdk-17-jdk \
+        sudo apt install -y zip unzip git openjdk-17-jdk wget \
         python3-pip autoconf libtool pkg-config zlib1g-dev \
         libncurses-dev cmake \
         libffi-dev libssl-dev
 
-    - name: Compilar APK
-      run: |
-        buildozer android debug
-
+    - name: Aceptar licencias Android
+  run: |
+    yes | sdkmanager --licenses
+    
+- name: Compilar APK
+  run: |
+    buildozer android debug
     - name: Subir APK
       uses: actions/upload-artifact@v4
       with:
