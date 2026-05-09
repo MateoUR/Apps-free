@@ -35,21 +35,20 @@ jobs:
         libncurses-dev cmake \
         libffi-dev libssl-dev
 
-    # NUEVO: Forzar descarga del SDK y aceptar licencias
-    - name: Aceptar licencias de Android SDK
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+
+    - name: Instalar Build Tools
       run: |
-        # Ejecuta buildozer android update para que descargue el SDK (fallará por licencias, pero los archivos se descargan igual)
-        buildozer android update || true
-        # Busca el sdkmanager que Buildozer instaló
-        SDKMANAGER=$(find /home/runner/.buildozer/android/platform/android-sdk -name sdkmanager | head -1)
-        if [ -n "$SDKMANAGER" ]; then
-          echo "Aceptando licencias..."
-          yes | $SDKMANAGER --licenses
-        else
-          echo "No se encontró sdkmanager; verifica la instalación del SDK"
-          exit 1
-        fi
+        sdkmanager "platform-tools"
+        sdkmanager "platforms;android-34"
+        sdkmanager "build-tools;34.0.0"
+
+    - name: Aceptar licencias
+      run: yes | sdkmanager --licenses
 
     - name: Compilar APK
+      env:
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       run: |
         buildozer android debug
