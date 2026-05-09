@@ -22,6 +22,14 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Instalar dependencias del sistema
+      run: |
+        sudo apt update
+        sudo apt install -y zip unzip git openjdk-17-jdk wget \
+        python3-pip autoconf libtool libtool-bin autopoint \
+        pkg-config zlib1g-dev libncurses-dev cmake \
+        libffi-dev libssl-dev
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
 
