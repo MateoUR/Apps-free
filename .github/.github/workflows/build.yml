@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Descargar repositorio
+      uses: actions/checkout@v4
+
+    - name: Instalar Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Instalar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+
+    - name: Instalar dependencias del sistema
+      run: |
+        sudo apt update
+        sudo apt install -y zip unzip git openjdk-17-jdk \
+        python3-pip autoconf libtool pkg-config zlib1g-dev \
+        libncurses5-dev libncursesw5-dev libtinfo5 cmake \
+        libffi-dev libssl-dev
+
+    - name: Compilar APK
+      run: |
+        buildozer android debug
+
+    - name: Subir APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: apk
+        path: bin/*.apk
