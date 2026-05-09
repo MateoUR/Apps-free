@@ -35,10 +35,6 @@ jobs:
         libncurses-dev cmake \
         libffi-dev libssl-dev
 
-    - name: Aceptar licencias Android
-      run: |
-        yes | sdkmanager --licenses
-
     - name: Compilar APK
       run: |
         buildozer android debug
