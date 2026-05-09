@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04              # ⬅️ Ubuntu 22.04 en lugar de latest
 
     steps:
     - name: Descargar repositorio
@@ -26,9 +26,14 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y zip unzip git openjdk-17-jdk wget \
-        python3-pip autoconf libtool libtool-bin autopoint \
-        pkg-config zlib1g-dev libncurses-dev cmake \
-        libffi-dev libssl-dev
+          python3-pip autoconf libtool libtool-bin automake autopoint \
+          pkg-config zlib1g-dev libncurses-dev cmake \
+          libffi-dev libssl-dev
+
+    - name: Instalar dependencias Python
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.36
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
@@ -41,18 +46,6 @@ jobs:
         sdkmanager "platform-tools"
         sdkmanager "platforms;android-34"
         sdkmanager "build-tools;34.0.0"
-
-    - name: Instalar dependencias Python
-      run: |
-        python -m pip install --upgrade pip
-        pip install buildozer cython==0.29.36
-
-    - name: Instalar dependencias Linux
-      run: |
-        sudo apt update
-        sudo apt install -y zip unzip git openjdk-17-jdk wget \
-        python3-pip autoconf libtool pkg-config zlib1g-dev \
-        libncurses-dev cmake libffi-dev libssl-dev
 
     - name: Compilar APK
       env:
