@@ -6,7 +6,7 @@ title = App Recordatorios
 # Nombre del paquete
 package.name = apprecordatorios
 
-# Dominio (Hospital Alma Mater)
+# Dominio
 package.domain = org.MateoUR
 
 # Directorio fuente
@@ -44,24 +44,14 @@ icon.filename = %(source.dir)s/bg_menu.png
 android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RECEIVE_BOOT_COMPLETED,SCHEDULE_EXACT_ALARM,USE_EXACT_ALARM
 
 # Servicio de segundo plano (corre aunque la app esté cerrada)
-# service.py se levanta como Foreground Service
 services = Recordatorio:service.py:foreground
 
 # Fuente Java para el BroadcastReceiver de arranque al encender
-# Crea la carpeta src/ junto a main.py y pon BootReceiver.java adentro
 android.add_src = src
 
-# Registrar el BootReceiver en el AndroidManifest automáticamente
-android.extra_manifest_xml = \
-    <receiver android:name="com.recordatorios.BootReceiver" \
-              android:enabled="true" \
-              android:exported="true"> \
-        <intent-filter> \
-            <action android:name="android.intent.action.BOOT_COMPLETED" /> \
-            <action android:name="android.intent.action.QUICKBOOT_POWERON" /> \
-            <category android:name="android.intent.category.DEFAULT" /> \
-        </intent-filter> \
-    </receiver>
+# El XML del BootReceiver se inyecta desde un archivo separado
+# (generado por el workflow antes de compilar)
+android.extra_manifest_application_arguments = android:name="android.app.Application"
 
 # API objetivo
 android.api = 34
@@ -74,7 +64,7 @@ android.build_tools_version = 34.0.0
 
 android.enable_androidx = True
 
-# LÍNEA CRÍTICA: Acepta las licencias automáticamente
+# Acepta las licencias automáticamente
 android.accept_sdk_license = True
 
 # Arquitecturas
@@ -85,7 +75,5 @@ android.archs = arm64-v8a, armeabi-v7a
 # -------------------------------------------------------
 [buildozer]
 
-# Nivel de log: 2 (Verbose)
 log_level = 2
-
 warn_on_root = 1
