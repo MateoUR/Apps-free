@@ -6,7 +6,7 @@ title = App Recordatorios
 # Nombre del paquete
 package.name = apprecordatorios
 
-# Dominio (Hospital Alma Mater)
+# Dominio
 package.domain = org.MateoUR
 
 # Directorio fuente
@@ -16,8 +16,8 @@ source.main = main.py
 # Extensiones a incluir (java para que empaquete BootReceiver)
 source.include_exts = py,png,json,mp3,java
 
-# Archivos de datos
-source.include_patterns = bg_menu.png,bg_medications.png,bg_appointments.png,sound_button.mp3,sound_notification.mp3,service.py
+# Archivos de datos (incluye utils.py que importan main.py y service.py)
+source.include_patterns = bg_menu.png,bg_medications.png,bg_appointments.png,sound_button.mp3,sound_notification.mp3,service.py,utils.py
 
 # Versión de la app
 version = 1.0
@@ -27,7 +27,7 @@ version = 1.0
 # -------------------------------------------------------
 requirements = python3,kivy==2.3.0,plyer,pillow,pyjnius
 
-# Gradle: necesario para androidx.core
+# Gradle: necesario para androidx.core (NotificationCompat)
 android.gradle_dependencies = androidx.core:core:1.12.0
 
 # Orientación
@@ -40,14 +40,19 @@ icon.filename = %(source.dir)s/bg_menu.png
 # Android
 # -------------------------------------------------------
 
-# Permisos — arranque automático, alarmas exactas, segundo plano y notificaciones
-android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RECEIVE_BOOT_COMPLETED,SCHEDULE_EXACT_ALARM,USE_EXACT_ALARM
+# Permisos: alarmas exactas, segundo plano, arranque automático y notificaciones
+android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RECEIVE_BOOT_COMPLETED,SCHEDULE_EXACT_ALARM
 
-# Servicio de segundo plano (corre aunque la app esté cerrada)
+# Servicio en segundo plano (foreground)
+# service.py se ejecuta como Foreground Service y recibe las alarmas del AlarmManager
 services = Recordatorio:service.py:foreground
 
-# Fuente Java para el BroadcastReceiver de arranque al encender
+# Incluir el código Java del BootReceiver
 android.add_src = src
+
+# Script de pre-construcción: modifica el AndroidManifest para añadir el BootReceiver
+# y el foregroundServiceType requerido en Android 14+
+android.pre_build = python3 pre_build.py
 
 # API objetivo
 android.api = 34
@@ -60,7 +65,7 @@ android.build_tools_version = 34.0.0
 
 android.enable_androidx = True
 
-# Acepta las licencias automáticamente
+# LÍNEA CRÍTICA: Acepta las licencias automáticamente
 android.accept_sdk_license = True
 
 # Arquitecturas
@@ -71,5 +76,7 @@ android.archs = arm64-v8a, armeabi-v7a
 # -------------------------------------------------------
 [buildozer]
 
+# Nivel de log: 2 (Verbose)
 log_level = 2
+
 warn_on_root = 1
