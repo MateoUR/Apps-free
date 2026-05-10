@@ -1,0 +1,154 @@
+name: Build APK
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Descargar repositorio
+      uses: actions/checkout@v4
+
+    - name: Instalar Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Instalar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar dependencias del sistema
+      run: |
+        sudo apt update
+        sudo apt install -y zip unzip git openjdk-17-jdk wget \
+          python3-pip autoconf libtool libtool-bin automake autopoint \
+          pkg-config zlib1g-dev libncurses-dev cmake \
+          libffi-dev libssl-dev
+
+    - name: Instalar dependencias Python
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+
+    - name: Aceptar licencias Android
+      run: yes | sdkmanager --licenses
+
+    - name: Instalar Build Tools y NDK
+      run: |
+        sdkmanager "platform-tools"
+        sdkmanager "platforms;android-34"
+        sdkmanager "build-tools;34.0.0"
+        sdkmanager "ndk;25.2.9519653"
+
+    - name: Crear src/BootReceiver.java
+      run: |
+        mkdir -p src
+        cat > src/BootReceiver.java << 'JAVA'
+package com.recordatorios;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+
+public class BootReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action)
+                || "android.intent.action.QUICKBOOT_POWERON".equals(action)) {
+
+            Intent serviceIntent = new Intent(context, org.kivy.android.PythonService.class);
+            serviceIntent.putExtra("androidPrivate",
+                    context.getFilesDir().getAbsolutePath());
+            serviceIntent.putExtra("androidArgument",
+                    context.getFilesDir().getAbsolutePath());
+            serviceIntent.putExtra("serviceEntrypoint", "service.py");
+            serviceIntent.putExtra("pythonName", "Recordatorio");
+            serviceIntent.putExtra("pythonHome",
+                    context.getFilesDir().getAbsolutePath());
+            serviceIntent.putExtra("pythonPath",
+                    context.getFilesDir().getAbsolutePath());
+            serviceIntent.putExtra("serviceStartAsForeground", "true");
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent);
+            } else {
+                context.startService(serviceIntent);
+            }
+        }
+    }
+}
+JAVA
+
+    # Buildozer genera el AndroidManifest en .buildozer/ durante la primera
+    # pasada. Usamos un hook de pre-build para inyectar el receiver después.
+    - name: Crear hook para inyectar BootReceiver en el Manifest
+      run: |
+        mkdir -p buildozer_hooks
+        cat > buildozer_hooks/pre_build.py << 'HOOK'
+import re
+import os
+
+manifest_path = os.path.join(
+    os.getcwd(),
+    ".buildozer", "android", "platform", "build-arm64-v8a_armeabi-v7a",
+    "dists", "apprecordatorios", "AndroidManifest.xml"
+)
+
+receiver_xml = """
+    <receiver
+        android:name="com.recordatorios.BootReceiver"
+        android:enabled="true"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            <category android:name="android.intent.category.DEFAULT" />
+        </intent-filter>
+    </receiver>
+"""
+
+if os.path.exists(manifest_path):
+    with open(manifest_path, "r") as f:
+        content = f.read()
+    if "BootReceiver" not in content:
+        content = content.replace("</application>", receiver_xml + "</application>")
+        with open(manifest_path, "w") as f:
+            f.write(content)
+        print("[HOOK] BootReceiver inyectado en AndroidManifest.xml")
+    else:
+        print("[HOOK] BootReceiver ya estaba en el manifest")
+else:
+    print(f"[HOOK] Manifest no encontrado en: {manifest_path}")
+HOOK
+
+    - name: Compilar APK (primera pasada — genera el manifest)
+      env:
+        ANDROIDSDK: /usr/local/lib/android/sdk
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+      run: |
+        buildozer android debug 2>&1 | head -500 || true
+
+    - name: Inyectar BootReceiver en AndroidManifest.xml
+      run: python3 buildozer_hooks/pre_build.py
+
+    - name: Compilar APK (segunda pasada — genera el APK final)
+      env:
+        ANDROIDSDK: /usr/local/lib/android/sdk
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+      run: |
+        buildozer android debug
+
+    - name: Subir APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: apk
+        path: bin/*.apk
