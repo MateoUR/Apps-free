@@ -25,7 +25,7 @@ version = 1.0
 # -------------------------------------------------------
 # Dependencias (Agregadas pygame y pyjnius)
 # -------------------------------------------------------
-requirements = python3,kivy==2.3.0,plyer,pillow,pygame,pyjnius
+requirements = python3,kivy==2.3.0,plyer,pillow,pyjnius
 
 # Gradle: necesario para androidx.core
 android.gradle_dependencies = androidx.core:core:1.12.0
