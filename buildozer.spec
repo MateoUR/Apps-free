@@ -41,16 +41,18 @@ icon.filename = %(source.dir)s/bg_menu.png
 # -------------------------------------------------------
 
 # Permisos
-android.permissions = VIBRATE, RECEIVE_BOOT_COMPLETED, POST_NOTIFICATIONS
+android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK
 
 # API objetivo (Android 15 / API 36 como pediste)
-android.api = 36
+android.api = 34
 android.minapi = 26
-android.sdk = 36
+android.sdk = 34
 android.ndk = 25b
 
 # Forzamos build-tools compatibles para evitar conflictos de licencia
 android.build_tools_version = 34.0.0
+
+android.enable_androidx = True
 
 # LÍNEA CRÍTICA: Acepta las licencias de la API 36 automáticamente
 android.accept_sdk_license = True
