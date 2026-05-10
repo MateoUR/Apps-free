@@ -29,16 +29,14 @@ from kivy.metrics import dp, sp
 # ============================================================
 if platform == "android":
     from android.permissions import request_permissions, check_permission, Permission
-    from android.storage import app_storage_path
     from android import api_version
     from jnius import autoclass
-
     ANDROID = True
 else:
     ANDROID = False
 
 # ============================================================
-# PLYER
+# PLYER (respaldo si falla la notificación nativa)
 # ============================================================
 try:
     from plyer import notification as plyer_notification
@@ -47,17 +45,11 @@ except ImportError:
     PLYER_AVAILABLE = False
 
 # ============================================================
-# RUTA SEGURA DE ALMACENAMIENTO
+# FUNCIONES COMPARTIDAS (alarmas y notificaciones)
+# schedule_alarm y send_notification viven en utils.py para
+# que service.py las pueda importar sin cargar toda la UI.
 # ============================================================
-def get_data_path(filename):
-    """
-    En Android escribe en /data/user/0/<paquete>/files/ (carpeta privada).
-    En PC escribe en el directorio actual.
-    """
-    if ANDROID:
-        base = App.get_running_app().user_data_dir
-        return os.path.join(base, filename)
-    return filename
+from utils import get_data_path, schedule_alarm, send_notification
 
 # ============================================================
 # SOLICITUD DE PERMISOS EN TIEMPO DE EJECUCIÓN
@@ -139,47 +131,6 @@ def _start_foreground_service():
         print(f"[SERVICIO ERROR] {e}")
 
 
-def schedule_alarm(trigger_epoch_ms, title, message):
-    """
-    Programa una alarma exacta con AlarmManager.
-    Dispara la notificación aunque la app esté cerrada o el teléfono
-    en modo Doze (ahorro de batería).
-    trigger_epoch_ms: int  — datetime.timestamp() * 1000
-    """
-    if not ANDROID:
-        return
-    try:
-        PythonActivity = autoclass('org.kivy.android.PythonActivity')
-        Context        = autoclass('android.content.Context')
-        AlarmManager   = autoclass('android.app.AlarmManager')
-        Intent         = autoclass('android.content.Intent')
-        PendingIntent  = autoclass('android.app.PendingIntent')
-
-        activity  = PythonActivity.mActivity
-        alarm_mgr = activity.getSystemService(Context.ALARM_SERVICE)
-
-        intent = Intent(activity, autoclass('org.kivy.android.PythonActivity'))
-        intent.putExtra("notif_title", str(title))
-        intent.putExtra("notif_message", str(message))
-        intent.setAction("com.recordatorios.ALARM")
-
-        flags = PendingIntent.FLAG_UPDATE_CURRENT
-        if api_version >= 31:
-            flags = flags | 0x02000000  # FLAG_IMMUTABLE
-
-        pending = PendingIntent.getBroadcast(
-            activity, random.randint(1, 999999), intent, flags
-        )
-
-        # setExactAndAllowWhileIdle despierta incluso en modo Doze
-        alarm_mgr.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            int(trigger_epoch_ms),
-            pending,
-        )
-        print(f"[ALARM] Programada para epoch_ms={trigger_epoch_ms}: {title}")
-    except Exception as e:
-        print(f"[ALARM ERROR] {e}")
 
 
 # ============================================================
@@ -378,9 +329,9 @@ class MenuScreen(Screen):
         )
         title.bind(size=title.setter("text_size"))
 
-        btn_med  = make_button("💊  Recordatorios de Medicamentos")
-        btn_apt  = make_button("📅  Citas Médicas")
-        btn_help = make_button("❓  Ayuda")
+        btn_med  = make_button("Recordatorios de Medicamentos")
+        btn_apt  = make_button("Citas Médicas")
+        btn_help = make_button("Ayuda")
 
         btn_med.bind(on_press=lambda *_: setattr(self.manager, "current", "medications"))
         btn_apt.bind(on_press=lambda *_: setattr(self.manager, "current", "appointments"))
@@ -435,7 +386,7 @@ class MedicationReminderScreen(DataMixin, Screen):
         self.chronic_checkbox = CheckBox(size_hint_x=0.2)
         chronic_row.add_widget(self.chronic_checkbox)
 
-        btn_set = make_button("✅  Establecer Recordatorio")
+        btn_set = make_button("Establecer Recordatorio")
         btn_set.bind(on_press=self.set_reminder)
 
         self.status_label = make_label("Esperando datos...", color=(0.1, 0.4, 0.1, 1))
@@ -537,14 +488,14 @@ class MedicationReminderScreen(DataMixin, Screen):
 
     def _push_medication(self, med_name, meds_per_dose, reminder_time):
         """Push notification: 'Es hora de tomar tu medicamento: <nombre>'"""
-        title   = "💊 Es hora de tomar tu medicamento"
+        title   = "Es hora de tomar tu medicamento"
         message = f"{med_name}  —  {meds_per_dose} unidad(es)  ({reminder_time.strftime('%H:%M')})"
         send_notification(title, message)
         play_sound(SND_NOTIFICATION)
 
     def _schedule_medication_alarm(self, med_name, meds_per_dose, trigger_dt):
         """Registra alarma exacta con AlarmManager (funciona con app cerrada)."""
-        title   = "💊 Es hora de tomar tu medicamento"
+        title   = "Es hora de tomar tu medicamento"
         message = f"{med_name}  —  {meds_per_dose} unidad(es)  ({trigger_dt.strftime('%H:%M')})"
         epoch_ms = int(trigger_dt.timestamp() * 1000)
         schedule_alarm(epoch_ms, title, message)
@@ -609,7 +560,7 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         date_row.add_widget(self.month_spinner)
         date_row.add_widget(self.year_spinner)
 
-        btn_set = make_button("📅  Establecer Cita Médica")
+        btn_set = make_button("Establecer Cita Médica")
         btn_set.bind(on_press=self.set_appointment)
 
         self.status_label = make_label("Esperando datos...", color=(0.1, 0.4, 0.1, 1))
@@ -691,14 +642,14 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
             # Alarma exacta (app cerrada / Doze mode)
             schedule_alarm(
                 int(alert_time.timestamp() * 1000),
-                "📅 Recordatorio de Cita Médica",
+                "Recordatorio de Cita Médica",
                 msg,
             )
             # Respaldo por sleep mientras la app sigue abierta
             wait = (alert_time - datetime.now()).total_seconds()
             if wait > 0:
                 time.sleep(wait)
-                send_notification("📅 Recordatorio de Cita Médica", msg)
+                send_notification("Recordatorio de Cita Médica", msg)
                 play_sound(SND_NOTIFICATION)
 
     def _send_notification(self, title, message):
@@ -872,96 +823,6 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
         self.appointment_spinner.text = "Seleccionar..."
 
 
-# ============================================================
-# NOTIFICACIÓN CENTRAL  (nativa Android > plyer > print)
-# ============================================================
-# ============================================================
-# NOTIFICACIÓN CENTRAL  (nativa Android > plyer > print)
-# ============================================================
-def send_notification(title, message):
-    if ANDROID:
-        try:
-            PythonActivity      = autoclass('org.kivy.android.PythonActivity')
-            Context             = autoclass('android.content.Context')
-            NotificationManager = autoclass('android.app.NotificationManager')
-            NotificationChannel = autoclass('android.app.NotificationChannel')
-            Builder             = autoclass('androidx.core.app.NotificationCompat$Builder')
-
-            activity = PythonActivity.mActivity
-
-            notif_manager = activity.getSystemService(
-                Context.NOTIFICATION_SERVICE
-            )
-
-            channel_id   = "canal_hospital_01"
-            channel_name = "Recordatorios de Salud"
-
-            # Android 8+
-            if api_version >= 26:
-                importance = NotificationManager.IMPORTANCE_HIGH
-
-                channel = NotificationChannel(
-                    channel_id,
-                    channel_name,
-                    importance
-                )
-
-                channel.enableVibration(True)
-                channel.enableLights(True)
-
-                notif_manager.createNotificationChannel(channel)
-
-            builder = Builder(activity, channel_id)
-
-            builder.setSmallIcon(activity.getApplicationInfo().icon)
-
-            builder.setContentTitle(str(title))
-            builder.setContentText(str(message))
-
-            builder.setStyle(
-                autoclass(
-                    'androidx.core.app.NotificationCompat$BigTextStyle'
-                )().bigText(str(message))
-            )
-
-            builder.setAutoCancel(True)
-
-            # PRIORIDAD ALTA
-            builder.setPriority(2)
-
-            # Vibración
-            builder.setVibrate([0, 300, 200, 300])
-
-            notification = builder.build()
-
-            notif_manager.notify(
-                random.randint(1, 999999),
-                notification
-            )
-
-            print(f"[NOTIF OK] {title} -> {message}")
-            return
-
-        except Exception as e:
-            print(f"[NOTIF ANDROID ERROR] {e}")
-
-    # Respaldo plyer
-    if PLYER_AVAILABLE:
-        try:
-            plyer_notification.notify(
-                title=str(title),
-                message=str(message),
-                app_name="App Recordatorios",
-                timeout=15,
-            )
-
-            print(f"[PLYER NOTIF] {title}")
-            return
-
-        except Exception as e:
-            print(f"[PLYER ERROR] {e}")
-
-    print(f"[NOTIFICACION] {title} | {message}")
 
 # ============================================================
 # APP PRINCIPAL
