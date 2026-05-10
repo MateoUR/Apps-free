@@ -1,12 +1,9 @@
 name: Build APK
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
-    runs-on: ubuntu-22.04              # ⬅️ Ubuntu 22.04 en lugar de latest
-
+    runs-on: ubuntu-22.04
     steps:
     - name: Descargar repositorio
       uses: actions/checkout@v4
@@ -41,16 +38,60 @@ jobs:
     - name: Aceptar licencias Android
       run: yes | sdkmanager --licenses
 
-    - name: Instalar Build Tools 34
+    - name: Instalar Build Tools y NDK
       run: |
         sdkmanager "platform-tools"
         sdkmanager "platforms;android-34"
         sdkmanager "build-tools;34.0.0"
+        sdkmanager "ndk;25.2.9519653"
+
+    # ── Nuevo: crear carpeta src/ con BootReceiver.java ──────────
+    - name: Crear src/BootReceiver.java
+      run: |
+        mkdir -p src
+        cat > src/BootReceiver.java << 'EOF'
+        package com.recordatorios;
+
+        import android.content.BroadcastReceiver;
+        import android.content.Context;
+        import android.content.Intent;
+        import android.os.Build;
+
+        public class BootReceiver extends BroadcastReceiver {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (Intent.ACTION_BOOT_COMPLETED.equals(action)
+                        || "android.intent.action.QUICKBOOT_POWERON".equals(action)) {
+
+                    Intent serviceIntent = new Intent(context, org.kivy.android.PythonService.class);
+                    serviceIntent.putExtra("androidPrivate",
+                            context.getFilesDir().getAbsolutePath());
+                    serviceIntent.putExtra("androidArgument",
+                            context.getFilesDir().getAbsolutePath());
+                    serviceIntent.putExtra("serviceEntrypoint", "service.py");
+                    serviceIntent.putExtra("pythonName", "Recordatorio");
+                    serviceIntent.putExtra("pythonHome",
+                            context.getFilesDir().getAbsolutePath());
+                    serviceIntent.putExtra("pythonPath",
+                            context.getFilesDir().getAbsolutePath());
+                    serviceIntent.putExtra("serviceStartAsForeground", "true");
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(serviceIntent);
+                    } else {
+                        context.startService(serviceIntent);
+                    }
+                }
+            }
+        }
+        EOF
 
     - name: Compilar APK
       env:
         ANDROIDSDK: /usr/local/lib/android/sdk
         ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
       run: |
         buildozer android debug
 
