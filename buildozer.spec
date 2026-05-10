@@ -49,10 +49,6 @@ services = Recordatorio:service.py:foreground
 # Fuente Java para el BroadcastReceiver de arranque al encender
 android.add_src = src
 
-# El XML del BootReceiver se inyecta desde un archivo separado
-# (generado por el workflow antes de compilar)
-android.extra_manifest_application_arguments = android:name="android.app.Application"
-
 # API objetivo
 android.api = 34
 android.minapi = 26
