@@ -7,7 +7,7 @@ title = App Recordatorios
 package.name = apprecordatorios
 
 # Dominio (Hospital Alma Mater)
-package.domain = org.hospitalalmamater
+package.domain = org.MateoUR
 
 # Directorio fuente
 source.dir = .
