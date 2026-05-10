@@ -67,7 +67,7 @@ def reprogramar_alarmas():
             # Programar las dosis que queden dentro del período
             end_time = now + timedelta(days=days)
             while dose_time < end_time:
-                title   = "💊 Es hora de tomar tu medicamento"
+                title   = "Es hora de tomar tu medicamento"
                 message = (
                     f"{med_name}  —  {meds_per_dose} unidad(es)"
                     f"  ({dose_time.strftime('%H:%M')})"
@@ -103,7 +103,7 @@ def reprogramar_alarmas():
                 if alert_time > now:
                     schedule_alarm(
                         int(alert_time.timestamp() * 1000),
-                        "📅 Recordatorio de Cita Médica",
+                        "Recordatorio de Cita Médica",
                         msg,
                     )
         except Exception as e:
@@ -184,7 +184,7 @@ if __name__ == "__main__":
                             dose_time += timedelta(hours=interval_hours)
                         if abs((dose_time - now).total_seconds()) <= 60:
                             send_notification(
-                                "💊 Es hora de tomar tu medicamento",
+                                "Es hora de tomar tu medicamento",
                                 f"{med['med_name']}  —  {med['meds_per_dose']} unidad(es)"
                                 f"  ({dose_time.strftime('%H:%M')})",
                             )
@@ -205,17 +205,17 @@ if __name__ == "__main__":
                         name = apt["name"]
                         if abs(diff - 86400) <= 60:
                             send_notification(
-                                "📅 Recordatorio de Cita Médica",
+                                "Recordatorio de Cita Médica",
                                 f"Tu cita '{name}' es mañana",
                             )
                         elif abs(diff - 3600) <= 60:
                             send_notification(
-                                "📅 Recordatorio de Cita Médica",
+                                "Recordatorio de Cita Médica",
                                 f"Tu cita '{name}' es en 1 hora",
                             )
                         elif abs(diff) <= 60:
                             send_notification(
-                                "📅 ¡Cita Médica Ahora!",
+                                "¡Cita Médica Ahora!",
                                 f"Es la hora de tu cita: {name}",
                             )
                 except Exception as e:
