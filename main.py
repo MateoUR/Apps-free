@@ -24,21 +24,62 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.image import AsyncImage
 from kivy.metrics import dp, sp
 
-# Verificación de plataforma Android
-if platform == 'android':
+# ============================================================
+# ANDROID
+# ============================================================
+if platform == "android":
     from android.permissions import request_permissions, Permission
+    from android.storage import app_storage_path
     from android import api_version
     from jnius import autoclass
+
     ANDROID = True
 else:
     ANDROID = False
 
+# ============================================================
+# PLYER
+# ============================================================
 try:
     from plyer import notification as plyer_notification
     PLYER_AVAILABLE = True
 except ImportError:
     PLYER_AVAILABLE = False
 
+# ============================================================
+# RUTA SEGURA DE ALMACENAMIENTO
+# ============================================================
+def get_data_path(filename):
+    if ANDROID:
+        return os.path.join(app_storage_path(), filename)
+    return filename
+
+# ============================================================
+# SOLICITUD DE PERMISOS
+# ============================================================
+def request_android_permissions():
+    if not ANDROID:
+        return
+
+    perms = [
+        Permission.VIBRATE,
+        Permission.WAKE_LOCK,
+        Permission.FOREGROUND_SERVICE,
+    ]
+
+    # Android 13+
+    if api_version >= 33:
+        perms.append(Permission.POST_NOTIFICATIONS)
+
+    def callback(permissions, results):
+        granted = all(results)
+
+        if granted:
+            print("✅ Permisos concedidos")
+        else:
+            print("❌ Permisos denegados")
+
+    request_permissions(perms, callback)
 
 # ============================================================
 # GESTIÓN DE DATOS - RUTA PROTEGIDA PARA ANDROID
@@ -53,7 +94,6 @@ def get_data_path(filename):
         return os.path.join(base, filename)
     return filename
 
-
 # ============================================================
 # SOLICITUD DE PERMISOS EN TIEMPO DE EJECUCIÓN
 # ============================================================
@@ -61,15 +101,49 @@ def request_android_permissions():
     if not ANDROID:
         return
 
-    perms = [Permission.VIBRATE, Permission.RECEIVE_BOOT_COMPLETED]
-    if api_version >= 33:           # Android 13+
-        perms.append(Permission.POST_NOTIFICATIONS)
+    try:
+        perms = [
+            Permission.VIBRATE,
+            Permission.WAKE_LOCK,
+            Permission.FOREGROUND_SERVICE,
+            Permission.RECEIVE_BOOT_COMPLETED,
+        ]
 
-    def callback(permissions, results):
-        granted = all(results)
-        print("Permisos concedidos" if granted else "Permisos denegados por el usuario")
+        # Android 13+ requiere permiso explícito
+        if api_version >= 33:
+            perms.append(Permission.POST_NOTIFICATIONS)
 
-    request_permissions(perms, callback)
+        # Filtrar permisos no concedidos
+        permissions_to_request = []
+
+        for perm in perms:
+            try:
+                if not check_permission(perm):
+                    permissions_to_request.append(perm)
+            except Exception:
+                permissions_to_request.append(perm)
+
+        # Ya estaban concedidos
+        if not permissions_to_request:
+            print("[PERMISOS] Todos los permisos ya estaban concedidos")
+            return
+
+        def callback(permissions, results):
+            for perm, granted in zip(permissions, results):
+                print(
+                    f"[PERMISO] {perm} -> "
+                    f"{'CONCEDIDO' if granted else 'DENEGADO'}"
+                )
+
+            if all(results):
+                print("[PERMISOS] Todos concedidos")
+            else:
+                print("[PERMISOS] Algunos permisos fueron denegados")
+
+        request_permissions(permissions_to_request, callback)
+
+    except Exception as e:
+        print(f"[ERROR PERMISOS] {e}")
 
 
 # ============================================================
@@ -81,7 +155,6 @@ BG_MEDICATIONS   = "bg_medications.png"
 BG_APPOINTMENTS  = "bg_appointments.png"
 SND_BUTTON       = "sound_button.mp3"
 SND_NOTIFICATION = "sound_notification.mp3"
-
 
 # ============================================================
 # SONIDO  (pygame primero; SoundLoader de Kivy como respaldo)
@@ -112,7 +185,6 @@ def play_sound(path):
         except Exception:
             pass  # Si el audio falla, la app sigue funcionando
     threading.Thread(target=_play, daemon=True).start()
-
 
 # ============================================================
 # HELPERS DE UI  (responsive: todo en dp/sp, sin px fijos)
@@ -204,27 +276,43 @@ def add_background(screen, image_path):
         root.add_widget(child)
     screen.add_widget(root)
 
-
 # ============================================================
 # MIXIN DE PERSISTENCIA  (usa ruta protegida en Android)
 # ============================================================
 class DataMixin:
     def load_data(self):
         path = get_data_path(self.data_file)
+
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
+
         except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+        except Exception as e:
+            print(f"Error al cargar {self.data_file}: {e}")
             return []
 
     def save_data(self, data):
         path = get_data_path(self.data_file)
+        temp_path = path + ".tmp"
+
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
+            # Guardado temporal seguro
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    data,
+                    f,
+                    indent=4,
+                    ensure_ascii=False
+                )
+
+            # Reemplazo seguro
+            os.replace(temp_path, path)
+
         except Exception as e:
             print(f"Error al guardar {self.data_file}: {e}")
-
 
 # ============================================================
 # MENÚ PRINCIPAL
@@ -718,6 +806,9 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
 # ============================================================
 # NOTIFICACIÓN CENTRAL  (nativa Android > plyer > print)
 # ============================================================
+# ============================================================
+# NOTIFICACIÓN CENTRAL  (nativa Android > plyer > print)
+# ============================================================
 def send_notification(title, message):
     if ANDROID:
         try:
@@ -727,46 +818,81 @@ def send_notification(title, message):
             NotificationChannel = autoclass('android.app.NotificationChannel')
             Builder             = autoclass('androidx.core.app.NotificationCompat$Builder')
 
-            activity     = PythonActivity.mActivity
-            notif_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
+            activity = PythonActivity.mActivity
+
+            notif_manager = activity.getSystemService(
+                Context.NOTIFICATION_SERVICE
+            )
 
             channel_id   = "canal_hospital_01"
             channel_name = "Recordatorios de Salud"
 
-            # Canal obligatorio desde Android 8+
+            # Android 8+
             if api_version >= 26:
                 importance = NotificationManager.IMPORTANCE_HIGH
-                channel    = NotificationChannel(channel_id, channel_name, importance)
+
+                channel = NotificationChannel(
+                    channel_id,
+                    channel_name,
+                    importance
+                )
+
                 channel.enableVibration(True)
+                channel.enableLights(True)
+
                 notif_manager.createNotificationChannel(channel)
 
             builder = Builder(activity, channel_id)
+
             builder.setSmallIcon(activity.getApplicationInfo().icon)
-            builder.setContentTitle(title)
-            builder.setContentText(message)
+
+            builder.setContentTitle(str(title))
+            builder.setContentText(str(message))
+
+            builder.setStyle(
+                autoclass(
+                    'androidx.core.app.NotificationCompat$BigTextStyle'
+                )().bigText(str(message))
+            )
+
             builder.setAutoCancel(True)
-            builder.setPriority(1)  # PRIORITY_HIGH
 
-            notif_manager.notify(random.randint(1, 10000), builder.build())
+            # PRIORIDAD ALTA
+            builder.setPriority(2)
+
+            # Vibración
+            builder.setVibrate([0, 300, 200, 300])
+
+            notification = builder.build()
+
+            notif_manager.notify(
+                random.randint(1, 999999),
+                notification
+            )
+
+            print(f"[NOTIF OK] {title} -> {message}")
             return
-        except Exception as e:
-            print(f"[NOTIF nativa falló] {e}")
 
-    # Respaldo: plyer
+        except Exception as e:
+            print(f"[NOTIF ANDROID ERROR] {e}")
+
+    # Respaldo plyer
     if PLYER_AVAILABLE:
         try:
             plyer_notification.notify(
-                title=title,
-                message=message,
+                title=str(title),
+                message=str(message),
                 app_name="App Recordatorios",
-                timeout=10,
+                timeout=15,
             )
+
+            print(f"[PLYER NOTIF] {title}")
             return
-        except Exception:
-            pass
 
-    print(f"[NOTIF] {title} | {message}")
+        except Exception as e:
+            print(f"[PLYER ERROR] {e}")
 
+    print(f"[NOTIFICACION] {title} | {message}")
 
 # ============================================================
 # APP PRINCIPAL
