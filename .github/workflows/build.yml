@@ -1,38 +1,50 @@
 name: Build APK
+
 on:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
+      # ── 1. Código fuente ────────────────────────────────────
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
+      # ── 2. Java ─────────────────────────────────────────────
       - name: Instalar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+      # ── 3. Python ───────────────────────────────────────────
       - name: Instalar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ── 4. Dependencias del sistema ─────────────────────────
       - name: Instalar dependencias del sistema
         run: |
           sudo apt update
-          sudo apt install -y zip unzip git openjdk-17-jdk wget \
-            python3-pip autoconf libtool libtool-bin automake autopoint \
-            pkg-config zlib1g-dev libncurses-dev cmake \
+          sudo apt install -y \
+            zip unzip git wget \
+            openjdk-17-jdk \
+            python3-pip \
+            autoconf libtool libtool-bin automake autopoint \
+            pkg-config \
+            zlib1g-dev libncurses-dev cmake \
             libffi-dev libssl-dev
 
+      # ── 5. Dependencias Python ──────────────────────────────
       - name: Instalar dependencias Python
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython==0.29.36
 
+      # ── 6. Android SDK ──────────────────────────────────────
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
 
@@ -46,25 +58,59 @@ jobs:
           sdkmanager "build-tools;34.0.0"
           sdkmanager "ndk;25.2.9519653"
 
+      # ── 7. Verificar estructura del proyecto ────────────────
+      - name: Verificar archivos requeridos
+        run: |
+          echo "=== Archivos en raíz ==="
+          ls -la
+          echo ""
+          echo "=== Verificando archivos críticos ==="
+          for f in main.py service.py utils.py buildozer.spec \
+                   bg_menu.png bg_medications.png bg_appointments.png \
+                   sound_button.mp3 sound_notification.mp3; do
+            if [ -f "$f" ]; then
+              echo "✅ $f"
+            else
+              echo "❌ $f — FALTA"
+            fi
+          done
+          echo ""
+          echo "=== Verificando BootReceiver.java ==="
+          if [ -f "src/com/recordatorios/BootReceiver.java" ]; then
+            echo "✅ src/com/recordatorios/BootReceiver.java"
+          else
+            echo "❌ src/com/recordatorios/BootReceiver.java — FALTA"
+          fi
+
+      # ── 8. Primera compilación ──────────────────────────────
+      # Genera el AndroidManifest.xml y el directorio .buildozer
       - name: Compilar APK (primera pasada — genera el manifest)
         env:
           ANDROIDSDK: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
-        run: buildozer android debug 2>&1 | head -500 || true
+        run: buildozer android debug 2>&1 | head -600 || true
 
+      # ── 9. Inyectar BootReceiver en el manifest ─────────────
+      # pre_build.py añade el <receiver> al AndroidManifest.xml
+      # generado por Buildozer, ya que Buildozer no soporta
+      # receivers personalizados directamente en el spec.
       - name: Inyectar BootReceiver en AndroidManifest.xml
         run: python3 pre_build.py
 
-      - name: Compilar APK (segunda pasada — genera el APK final)
+      # ── 10. Segunda compilación ─────────────────────────────
+      # Genera el APK final con el manifest corregido
+      - name: Compilar APK (segunda pasada — APK final)
         env:
           ANDROIDSDK: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
         run: buildozer android debug
 
+      # ── 11. Subir APK como artefacto ────────────────────────
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: app-recordatorios-debug
           path: bin/*.apk
+          retention-days: 30
