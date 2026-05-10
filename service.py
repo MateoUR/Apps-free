@@ -1,176 +1,227 @@
 # ============================================================
 # service.py  —  Android Foreground Service
 # ============================================================
-# Este archivo corre como un proceso separado de Android.
-# Android lo mantiene vivo aunque el usuario cierre la app.
-# Requiere declarar en buildozer.spec:
-#   services = Recordatorio:service.py
+# Coloca este archivo en la raíz del proyecto junto a main.py.
 #
-# El proceso revisa el archivo JSON de recordatorios cada
-# minuto y dispara notificaciones nativas cuando corresponde.
+# Declarar en buildozer.spec:
+#   services = Recordatorio:service.py:foreground
+#
+# Este proceso:
+#  1. Arranca como Foreground Service (no puede ser matado)
+#  2. Al recibir ALARM: muestra la notificación inmediatamente
+#  3. Al recibir BOOT_COMPLETED: reprograma todas las alarmas
+#     guardadas en los JSON
 # ============================================================
 
 import json
 import os
-import time
 import random
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 from kivy.utils import platform
 
-# ── Android imports ──────────────────────────────────────────
 if platform == "android":
     from jnius import autoclass
-    from android import api_version
+    from android import api_version, AndroidService
     ANDROID = True
 else:
     ANDROID = False
 
-
-# ── Ruta al archivo de datos ─────────────────────────────────
-def get_data_path(filename):
-    if ANDROID:
-        # Mismo directorio que usa main.py
-        PythonService = autoclass('org.kivy.android.PythonService')
-        base = PythonService.mService.getFilesDir().getAbsolutePath()
-        return os.path.join(base, filename)
-    return filename
+# Importar funciones compartidas
+from utils import get_data_path, schedule_alarm, send_notification
 
 
-# ── Enviar notificación nativa ────────────────────────────────
-def send_notification(title, message):
-    if not ANDROID:
-        print(f"[NOTIF] {title} | {message}")
-        return
+# ============================================================
+# REPROGRAMAR ALARMAS TRAS REINICIO
+# Lee los JSON guardados y vuelve a registrar con AlarmManager
+# todas las alarmas que aún están en el futuro.
+# ============================================================
+def reprogramar_alarmas():
+    print("[SERVICE] Reprogramando alarmas tras reinicio...")
+
+    # ── Medicamentos ──────────────────────────────────────────
+    med_path = get_data_path("medications_data.json")
     try:
-        PythonService       = autoclass('org.kivy.android.PythonService')
-        Context             = autoclass('android.content.Context')
-        NotificationManager = autoclass('android.app.NotificationManager')
-        NotificationChannel = autoclass('android.app.NotificationChannel')
-        Builder             = autoclass('androidx.core.app.NotificationCompat$Builder')
-
-        service = PythonService.mService
-
-        notif_manager = service.getSystemService(Context.NOTIFICATION_SERVICE)
-        channel_id    = "canal_hospital_01"
-
-        if api_version >= 26:
-            channel = NotificationChannel(
-                channel_id,
-                "Recordatorios de Salud",
-                NotificationManager.IMPORTANCE_HIGH,
-            )
-            channel.enableVibration(True)
-            channel.enableLights(True)
-            notif_manager.createNotificationChannel(channel)
-
-        builder = Builder(service, channel_id)
-        builder.setSmallIcon(service.getApplicationInfo().icon)
-        builder.setContentTitle(str(title))
-        builder.setContentText(str(message))
-        builder.setStyle(
-            autoclass('androidx.core.app.NotificationCompat$BigTextStyle')()
-            .bigText(str(message))
-        )
-        builder.setAutoCancel(True)
-        builder.setPriority(2)          # PRIORITY_MAX
-        builder.setVibrate([0, 300, 200, 300])
-
-        notif_manager.notify(random.randint(1, 999999), builder.build())
-        print(f"[SERVICE NOTIF OK] {title}")
-
-    except Exception as e:
-        print(f"[SERVICE NOTIF ERROR] {e}")
-
-
-# ── Revisar recordatorios de medicamentos ────────────────────
-def check_medications(data_path):
-    try:
-        with open(data_path, "r", encoding="utf-8") as f:
+        with open(med_path, "r", encoding="utf-8") as f:
             medications = json.load(f)
     except Exception:
-        return
+        medications = []
 
     now = datetime.now()
-
     for med in medications:
         try:
             med_name       = med["med_name"]
             interval_hours = int(med["interval_hours"])
             meds_per_dose  = int(med["meds_per_dose"])
-            start_time_str = med["start_time"]        # "HH:MM"
             days           = int(med["days"])
+            h, m           = map(int, med["start_time"].split(":"))
 
-            start_h, start_m = map(int, start_time_str.split(":"))
-            start_base = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+            # Primera dosis del día actual
+            dose_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
 
-            # Calcular la próxima dosis a partir de ahora
-            dose_time = start_base
-            end_time  = start_base.replace(hour=0, minute=0) + __import__("datetime").timedelta(days=days)
+            # Avanzar hasta la siguiente dosis futura
+            while dose_time <= now:
+                dose_time += timedelta(hours=interval_hours)
 
-            while dose_time < now - __import__("datetime").timedelta(minutes=1):
-                dose_time += __import__("datetime").timedelta(hours=interval_hours)
-
-            # ¿Toca ahora? (ventana de ±1 minuto)
-            diff = abs((dose_time - now).total_seconds())
-            if diff <= 60:
-                send_notification(
-                    "💊 Es hora de tomar tu medicamento",
-                    f"{med_name}  —  {meds_per_dose} unidad(es)  ({dose_time.strftime('%H:%M')})",
+            # Programar las dosis que queden dentro del período
+            end_time = now + timedelta(days=days)
+            while dose_time < end_time:
+                title   = "💊 Es hora de tomar tu medicamento"
+                message = (
+                    f"{med_name}  —  {meds_per_dose} unidad(es)"
+                    f"  ({dose_time.strftime('%H:%M')})"
                 )
+                schedule_alarm(int(dose_time.timestamp() * 1000), title, message)
+                dose_time += timedelta(hours=interval_hours)
 
         except Exception as e:
-            print(f"[SERVICE MED ERROR] {med.get('med_name', '?')}: {e}")
+            print(f"[SERVICE BOOT MED ERROR] {med.get('med_name', '?')}: {e}")
 
-
-# ── Revisar citas médicas ─────────────────────────────────────
-def check_appointments(data_path):
+    # ── Citas ─────────────────────────────────────────────────
+    apt_path = get_data_path("appointments_data.json")
     try:
-        with open(data_path, "r", encoding="utf-8") as f:
+        with open(apt_path, "r", encoding="utf-8") as f:
             appointments = json.load(f)
     except Exception:
-        return
-
-    now = datetime.now()
+        appointments = []
 
     for apt in appointments:
         try:
-            name  = apt["name"]
-            h, m  = map(int, apt["time"].split(":"))
+            name   = apt["name"]
+            h, m   = map(int, apt["time"].split(":"))
             apt_dt = datetime(
                 int(apt["year"]), int(apt["month"]), int(apt["day"]), h, m
             )
 
-            diff_s = (apt_dt - now).total_seconds()
-
-            # 1 día antes (ventana ±60 s)
-            if abs(diff_s - 86400) <= 60:
-                send_notification("📅 Recordatorio de Cita Médica", f"Tu cita '{name}' es mañana")
-
-            # 1 hora antes (ventana ±60 s)
-            elif abs(diff_s - 3600) <= 60:
-                send_notification("📅 Recordatorio de Cita Médica", f"Tu cita '{name}' es en 1 hora")
-
-            # En el momento (ventana ±60 s)
-            elif abs(diff_s) <= 60:
-                send_notification("📅 ¡Cita Médica Ahora!", f"Es la hora de tu cita: {name}")
-
+            alerts = [
+                (apt_dt - timedelta(days=1),  f"Tu cita {name} es mañana"),
+                (apt_dt - timedelta(hours=1), f"Tu cita {name} es en 1 hora"),
+                (apt_dt,                       f"Es la hora de tu cita: {name}"),
+            ]
+            for alert_time, msg in alerts:
+                if alert_time > now:
+                    schedule_alarm(
+                        int(alert_time.timestamp() * 1000),
+                        "📅 Recordatorio de Cita Médica",
+                        msg,
+                    )
         except Exception as e:
-            print(f"[SERVICE APT ERROR] {apt.get('name', '?')}: {e}")
+            print(f"[SERVICE BOOT APT ERROR] {apt.get('name', '?')}: {e}")
+
+    print("[SERVICE] Reprogramación completada")
 
 
-# ── Bucle principal del servicio ──────────────────────────────
+# ============================================================
+# PUNTO DE ENTRADA DEL SERVICIO
+# ============================================================
 if __name__ == "__main__":
     print("[SERVICE] Iniciado")
 
-    med_path = get_data_path("medications_data.json")
-    apt_path = get_data_path("appointments_data.json")
+    if not ANDROID:
+        print("[SERVICE] No es Android, saliendo.")
+        exit(0)
 
-    while True:
+    # ── Iniciar como Foreground Service (OBLIGATORIO) ─────────
+    # Sin esto Android mata el proceso en segundos.
+    service = AndroidService(
+        "Recordatorios activos",
+        "Vigilando tus recordatorios de salud...",
+    )
+    service.start("service_started")
+    print("[SERVICE] Foreground Service activo")
+
+    # ── Leer el intent que despertó este servicio ─────────────
+    try:
+        PythonService = autoclass('org.kivy.android.PythonService')
+        intent = PythonService.mService.getIntent()
+        action = intent.getAction() if intent else None
+        print(f"[SERVICE] Action recibida: {action}")
+    except Exception as e:
+        print(f"[SERVICE] Error al leer intent: {e}")
+        action = None
+
+    if action == "com.recordatorios.ALARM":
+        # ── Alarma exacta disparada: mostrar notificación ─────
         try:
-            check_medications(med_path)
-            check_appointments(apt_path)
+            title   = intent.getStringExtra("notif_title") or "Recordatorio"
+            message = intent.getStringExtra("notif_message") or ""
+            send_notification(title, message)
         except Exception as e:
-            print(f"[SERVICE LOOP ERROR] {e}")
+            print(f"[SERVICE ALARM ERROR] {e}")
+        # Detener el servicio tras mostrar la notificación
+        service.stop()
 
-        time.sleep(60)   # Revisa cada 60 segundos
+    elif action in (
+        "android.intent.action.BOOT_COMPLETED",
+        "android.intent.action.QUICKBOOT_POWERON",
+    ):
+        # ── Boot completado: reprogramar todas las alarmas ────
+        reprogramar_alarmas()
+        service.stop()
+
+    else:
+        # ── Inicio manual desde main.py (permisos concedidos) ─
+        # Mantener el servicio vivo en segundo plano revisando
+        # periódicamente (respaldo por si AlarmManager falla).
+        print("[SERVICE] Modo vigilancia en segundo plano activo")
+        med_path = get_data_path("medications_data.json")
+        apt_path = get_data_path("appointments_data.json")
+
+        while True:
+            try:
+                now = datetime.now()
+
+                # Revisar medicamentos (ventana ±60 s)
+                try:
+                    with open(med_path, "r", encoding="utf-8") as f:
+                        meds = json.load(f)
+                    for med in meds:
+                        h, m = map(int, med["start_time"].split(":"))
+                        interval_hours = int(med["interval_hours"])
+                        dose_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                        while dose_time < now - timedelta(minutes=1):
+                            dose_time += timedelta(hours=interval_hours)
+                        if abs((dose_time - now).total_seconds()) <= 60:
+                            send_notification(
+                                "💊 Es hora de tomar tu medicamento",
+                                f"{med['med_name']}  —  {med['meds_per_dose']} unidad(es)"
+                                f"  ({dose_time.strftime('%H:%M')})",
+                            )
+                except Exception as e:
+                    print(f"[SERVICE LOOP MED] {e}")
+
+                # Revisar citas (ventana ±60 s)
+                try:
+                    with open(apt_path, "r", encoding="utf-8") as f:
+                        apts = json.load(f)
+                    for apt in apts:
+                        h, m   = map(int, apt["time"].split(":"))
+                        apt_dt = datetime(
+                            int(apt["year"]), int(apt["month"]),
+                            int(apt["day"]), h, m
+                        )
+                        diff = (apt_dt - now).total_seconds()
+                        name = apt["name"]
+                        if abs(diff - 86400) <= 60:
+                            send_notification(
+                                "📅 Recordatorio de Cita Médica",
+                                f"Tu cita '{name}' es mañana",
+                            )
+                        elif abs(diff - 3600) <= 60:
+                            send_notification(
+                                "📅 Recordatorio de Cita Médica",
+                                f"Tu cita '{name}' es en 1 hora",
+                            )
+                        elif abs(diff) <= 60:
+                            send_notification(
+                                "📅 ¡Cita Médica Ahora!",
+                                f"Es la hora de tu cita: {name}",
+                            )
+                except Exception as e:
+                    print(f"[SERVICE LOOP APT] {e}")
+
+            except Exception as e:
+                print(f"[SERVICE LOOP ERROR] {e}")
+
+            time.sleep(60)
