@@ -5,9 +5,12 @@ import json
 import os
 import time
 import threading
+import random
 from datetime import datetime, timedelta
 
 from kivy.app import App
+from kivy.clock import Clock
+from kivy.utils import platform
 from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -21,33 +24,52 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.image import AsyncImage
 from kivy.metrics import dp, sp
 
+# Verificación de plataforma Android
+if platform == 'android':
+    from android.permissions import request_permissions, Permission
+    from android import api_version
+    from jnius import autoclass
+    ANDROID = True
+else:
+    ANDROID = False
+
 try:
     from plyer import notification as plyer_notification
     PLYER_AVAILABLE = True
 except ImportError:
     PLYER_AVAILABLE = False
 
-# Solicitud de permisos en Android en tiempo de ejecución
-try:
-    from android.permissions import request_permissions, Permission, check_permission
-    from android import api_version
-    ANDROID = True
-except ImportError:
-    ANDROID = False
+
+# ============================================================
+# GESTIÓN DE DATOS - RUTA PROTEGIDA PARA ANDROID
+# ============================================================
+def get_data_path(filename):
+    """
+    En Android escribe en /data/user/0/<paquete>/files/ (carpeta privada).
+    En PC escribe en el directorio actual.
+    """
+    if ANDROID:
+        base = App.get_running_app().user_data_dir
+        return os.path.join(base, filename)
+    return filename
 
 
+# ============================================================
+# SOLICITUD DE PERMISOS EN TIEMPO DE EJECUCIÓN
+# ============================================================
 def request_android_permissions():
-    """
-    Pide POST_NOTIFICATIONS (Android 13+) y VIBRATE en tiempo de ejecución.
-    En versiones anteriores a Android 13 las notificaciones no necesitan
-    permiso explícito, pero VIBRATE sí se declara en el manifest.
-    """
     if not ANDROID:
         return
-    perms = [Permission.VIBRATE]
-    if api_version >= 33:          # Android 13+
+
+    perms = [Permission.VIBRATE, Permission.RECEIVE_BOOT_COMPLETED]
+    if api_version >= 33:           # Android 13+
         perms.append(Permission.POST_NOTIFICATIONS)
-    request_permissions(perms)
+
+    def callback(permissions, results):
+        granted = all(results)
+        print("Permisos concedidos" if granted else "Permisos denegados por el usuario")
+
+    request_permissions(perms, callback)
 
 
 # ============================================================
@@ -184,19 +206,24 @@ def add_background(screen, image_path):
 
 
 # ============================================================
-# MIXIN DE PERSISTENCIA
+# MIXIN DE PERSISTENCIA  (usa ruta protegida en Android)
 # ============================================================
 class DataMixin:
     def load_data(self):
+        path = get_data_path(self.data_file)
         try:
-            with open(self.data_file, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return []
 
     def save_data(self, data):
-        with open(self.data_file, "w") as f:
-            json.dump(data, f, indent=4)
+        path = get_data_path(self.data_file)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Error al guardar {self.data_file}: {e}")
 
 
 # ============================================================
@@ -692,46 +719,35 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
 # NOTIFICACIÓN CENTRAL  (nativa Android > plyer > print)
 # ============================================================
 def send_notification(title, message):
-    """
-    Intenta enviar la notificación por el método más confiable disponible:
-    1. API nativa de Android (android.app.Notification) vía pyjnius
-    2. plyer como respaldo
-    3. print como último recurso
-    """
     if ANDROID:
         try:
-            from jnius import autoclass, cast
-            PythonActivity   = autoclass("org.kivy.android.PythonActivity")
-            NotifManager     = autoclass("android.app.NotificationManager")
-            NotifCompat      = autoclass("androidx.core.app.NotificationCompat")
-            ChannelClass     = autoclass("android.app.NotificationChannel")
-            context          = PythonActivity.mActivity
+            PythonActivity      = autoclass('org.kivy.android.PythonActivity')
+            Context             = autoclass('android.content.Context')
+            NotificationManager = autoclass('android.app.NotificationManager')
+            NotificationChannel = autoclass('android.app.NotificationChannel')
+            Builder             = autoclass('androidx.core.app.NotificationCompat$Builder')
 
-            CHANNEL_ID = "app_recordatorios_channel"
-            manager = cast(
-                "android.app.NotificationManager",
-                context.getSystemService("notification")
-            )
+            activity     = PythonActivity.mActivity
+            notif_manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
 
-            # Crear canal (requerido Android 8+)
+            channel_id   = "canal_hospital_01"
+            channel_name = "Recordatorios de Salud"
+
+            # Canal obligatorio desde Android 8+
             if api_version >= 26:
-                channel = ChannelClass(
-                    CHANNEL_ID,
-                    "Recordatorios",
-                    NotifManager.IMPORTANCE_HIGH,
-                )
+                importance = NotificationManager.IMPORTANCE_HIGH
+                channel    = NotificationChannel(channel_id, channel_name, importance)
                 channel.enableVibration(True)
-                manager.createNotificationChannel(channel)
+                notif_manager.createNotificationChannel(channel)
 
-            builder = NotifCompat.Builder(context, CHANNEL_ID)
-            builder.setSmallIcon(autoclass("android.R$drawable").ic_dialog_info)
+            builder = Builder(activity, channel_id)
+            builder.setSmallIcon(activity.getApplicationInfo().icon)
             builder.setContentTitle(title)
             builder.setContentText(message)
             builder.setAutoCancel(True)
-            builder.setPriority(NotifCompat.PRIORITY_HIGH)
+            builder.setPriority(1)  # PRIORITY_HIGH
 
-            import random
-            manager.notify(random.randint(1, 99999), builder.build())
+            notif_manager.notify(random.randint(1, 10000), builder.build())
             return
         except Exception as e:
             print(f"[NOTIF nativa falló] {e}")
@@ -757,9 +773,6 @@ def send_notification(title, message):
 # ============================================================
 class ReminderApp(App):
     def build(self):
-        # Pedir permisos al arrancar la app en Android
-        request_android_permissions()
-
         self.sm = ScreenManager()
         self.sm.add_widget(MenuScreen(name="menu"))
         self.sm.add_widget(MedicationReminderScreen(name="medications"))
@@ -768,6 +781,15 @@ class ReminderApp(App):
         self.sm.add_widget(DeleteAppointmentsScreen(name="delete_appointments"))
         self.sm.add_widget(HelpScreen(name="help"))
         return self.sm
+
+    def on_start(self):
+        """
+        Se ejecuta cuando la UI ya está visible.
+        Esperamos 1 segundo para no interrumpir la carga de la pantalla
+        antes de mostrar el diálogo de permisos al usuario.
+        """
+        if ANDROID:
+            Clock.schedule_once(lambda dt: request_android_permissions(), 1)
 
 
 if __name__ == "__main__":
