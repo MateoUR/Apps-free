@@ -1,11 +1,14 @@
 // ============================================================
 // BootReceiver.java
-// Coloca este archivo en:
-//   <tu_proyecto>/src/BootReceiver.java
-// Y agrega en buildozer.spec:
+//
+// UBICACIÓN CORRECTA (corrección de Corrección.txt §1):
+//   <tu_proyecto>/src/com/recordatorios/BootReceiver.java
+//
+// En buildozer.spec agregar:
 //   android.add_src = src
+//   android.manifest.intent_filters = <receiver android:name="com.recordatorios.BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.QUICKBOOT_POWERON"/></intent-filter></receiver>
 // ============================================================
-package com.recordatorios;
+package com.recordatorios;   // <-- paquete que coincide con la ruta src/com/recordatorios/
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -21,14 +24,18 @@ public class BootReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)
                 || "android.intent.action.QUICKBOOT_POWERON".equals(action)) {
 
-            // Arrancar el Foreground Service de Python
+            // Lanzar el Foreground Service de Python para reprogramar alarmas
+            // Corrección: se pasa la action del intent para que service.py sepa
+            // que fue disparado por BOOT_COMPLETED y ejecute reprogramar_alarmas()
             Intent serviceIntent = new Intent(context, org.kivy.android.PythonService.class);
+            serviceIntent.setAction(action);   // <-- pasa BOOT_COMPLETED al service.py
+
             serviceIntent.putExtra("androidPrivate",
                     context.getFilesDir().getAbsolutePath());
             serviceIntent.putExtra("androidArgument",
                     context.getFilesDir().getAbsolutePath());
             serviceIntent.putExtra("serviceEntrypoint", "service.py");
-            serviceIntent.putExtra("pythonName", "Recordatorio");
+            serviceIntent.putExtra("pythonName",        "Recordatorio");
             serviceIntent.putExtra("pythonHome",
                     context.getFilesDir().getAbsolutePath());
             serviceIntent.putExtra("pythonPath",
