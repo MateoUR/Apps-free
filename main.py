@@ -838,14 +838,17 @@ class ReminderApp(App):
         self.sm.add_widget(HelpScreen(name="help"))
         return self.sm
 
-    def on_start(self):
-        """
-        Se ejecuta cuando la UI ya está visible.
-        Esperamos 1 segundo para no interrumpir la carga de la pantalla
-        antes de mostrar el diálogo de permisos al usuario.
-        """
-        if ANDROID:
-            Clock.schedule_once(lambda dt: request_android_permissions(), 1)
+   def on_start(self):
+    if ANDROID:
+        Clock.schedule_once(lambda dt: request_android_permissions(), 1)
+        Clock.schedule_once(lambda dt: self.reprogramar_alarmas_guardadas(), 2)
+
+def reprogramar_alarmas_guardadas(self):
+    try:
+        from utils import reprogramar_alarmas
+        reprogramar_alarmas()
+    except Exception as e:
+        print(f"[MAIN] Error al reprogramar alarmas: {e}")
 
 
 if __name__ == "__main__":
