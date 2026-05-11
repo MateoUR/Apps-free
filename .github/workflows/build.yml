@@ -69,45 +69,28 @@ jobs:
                    bg_menu.png bg_medications.png bg_appointments.png \
                    sound_button.mp3 sound_notification.mp3; do
             if [ -f "$f" ]; then
-              echo "✅ $f"
+              echo " $f"
             else
-              echo "❌ $f — FALTA"
+              echo " $f — FALTA"
             fi
           done
           echo ""
           echo "=== Verificando BootReceiver.java ==="
           if [ -f "src/com/recordatorios/BootReceiver.java" ]; then
-            echo "✅ src/com/recordatorios/BootReceiver.java"
+            echo " src/com/recordatorios/BootReceiver.java"
           else
-            echo "❌ src/com/recordatorios/BootReceiver.java — FALTA"
+            echo " src/com/recordatorios/BootReceiver.java — FALTA"
           fi
 
-      # ── 8. Primera compilación ──────────────────────────────
-      # Genera el AndroidManifest.xml y el directorio .buildozer
-      - name: Compilar APK (primera pasada — genera el manifest)
-        env:
-          ANDROIDSDK: /usr/local/lib/android/sdk
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
-        run: buildozer android debug 2>&1 | head -600 || true
-
-      # ── 9. Inyectar BootReceiver en el manifest ─────────────
-      # pre_build.py añade el <receiver> al AndroidManifest.xml
-      # generado por Buildozer, ya que Buildozer no soporta
-      # receivers personalizados directamente en el spec.
-      - name: Inyectar BootReceiver en AndroidManifest.xml
-        run: python3 pre_build.py
-
-      # ── 10. Segunda compilación ─────────────────────────────
-      # Genera el APK final con el manifest corregido
-      - name: Compilar APK (segunda pasada — APK final)
+      # ── 8. Compilación única con Buildozer ─────────────────
+      - name: Compilar APK
         env:
           ANDROIDSDK: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
         run: buildozer android debug
 
-      # ── 11. Subir APK como artefacto ────────────────────────
+      # ── 9. Subir APK como artefacto ────────────────────────
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
