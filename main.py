@@ -36,7 +36,7 @@ else:
     ANDROID = False
 
 # ============================================================
-# PLYER (respaldo si falla la notificación nativa)
+# PLYER (respaldo si falla la notificacion nativa)
 # ============================================================
 try:
     from plyer import notification as plyer_notification
@@ -46,18 +46,16 @@ except ImportError:
 
 # ============================================================
 # FUNCIONES COMPARTIDAS (alarmas y notificaciones)
-# schedule_alarm y send_notification viven en utils.py para
-# que service.py las pueda importar sin cargar toda la UI.
 # ============================================================
 from utils import get_data_path, schedule_alarm, send_notification
 
 # ============================================================
-# SOLICITUD DE PERMISOS EN TIEMPO DE EJECUCIÓN
+# SOLICITUD DE PERMISOS EN TIEMPO DE EJECUCION
 # ============================================================
 def request_android_permissions():
     """
     Solicita TODOS los permisos necesarios para notificaciones push
-    con la app cerrada, segundo plano e inicio con el teléfono.
+    con la app cerrada, segundo plano e inicio con el telefono.
     """
     if not ANDROID:
         return
@@ -70,18 +68,15 @@ def request_android_permissions():
             Permission.RECEIVE_BOOT_COMPLETED,
         ]
 
-        # Android 13+ requiere permiso explícito de notificaciones
         if api_version >= 33:
             perms.append(Permission.POST_NOTIFICATIONS)
 
-        # Android 12+: alarmas exactas (AlarmManager)
         if api_version >= 31:
             try:
                 perms.append(Permission.SCHEDULE_EXACT_ALARM)
             except AttributeError:
                 pass
 
-        # Filtrar solo los permisos no concedidos aún
         permissions_to_request = []
         for perm in perms:
             try:
@@ -99,7 +94,7 @@ def request_android_permissions():
             for perm, granted in zip(permissions, results):
                 print(f"[PERMISO] {perm} -> {'CONCEDIDO' if granted else 'DENEGADO'}")
             if all(results):
-                print("[PERMISOS] Todos concedidos — iniciando servicio")
+                print("[PERMISOS] Todos concedidos -- iniciando servicio")
                 _start_foreground_service()
             else:
                 print("[PERMISOS] Algunos permisos fueron denegados")
@@ -111,12 +106,6 @@ def request_android_permissions():
 
 
 def _start_foreground_service():
-    """
-    Lanza el Foreground Service para que el proceso sobreviva
-    con la app en segundo plano o cerrada.
-    Requiere que 'services' esté declarado en buildozer.spec:
-      services = Recordatorio:service.py
-    """
     if not ANDROID:
         return
     try:
@@ -131,8 +120,6 @@ def _start_foreground_service():
         print(f"[SERVICIO ERROR] {e}")
 
 
-
-
 # ============================================================
 # CONSTANTES
 # ============================================================
@@ -144,7 +131,7 @@ SND_BUTTON       = "sound_button.mp3"
 SND_NOTIFICATION = "sound_notification.mp3"
 
 # ============================================================
-# SONIDO  (pygame primero; SoundLoader de Kivy como respaldo)
+# SONIDO
 # ============================================================
 try:
     import pygame
@@ -158,7 +145,6 @@ if not _PYGAME_OK:
 
 
 def play_sound(path):
-    """Reproduce un sonido en un hilo separado para no bloquear la UI."""
     def _play():
         try:
             if _PYGAME_OK:
@@ -170,23 +156,22 @@ def play_sound(path):
                 if snd:
                     snd.play()
         except Exception:
-            pass  # Si el audio falla, la app sigue funcionando
+            pass
     threading.Thread(target=_play, daemon=True).start()
 
 # ============================================================
-# HELPERS DE UI  (responsive: todo en dp/sp, sin px fijos)
+# HELPERS DE UI
 # ============================================================
-BTN_H      = dp(48)   # altura estándar de botón
-INPUT_H    = dp(44)   # altura de TextInput
+BTN_H      = dp(48)
+INPUT_H    = dp(44)
 SPINNER_H  = dp(44)
-PAD        = dp(12)   # padding general
-SPC        = dp(10)   # spacing general
-FONT_L     = sp(16)   # fuente labels
-FONT_BTN   = sp(15)   # fuente botones
+PAD        = dp(12)
+SPC        = dp(10)
+FONT_L     = sp(16)
+FONT_BTN   = sp(15)
 
 
 def make_button(text, **kwargs):
-    """Botón estilo uniforme con tamaño relativo."""
     defaults = dict(
         text=text,
         size_hint_x=1,
@@ -246,7 +231,6 @@ def make_spinner(text, values, **kwargs):
 
 
 def add_background(screen, image_path):
-    """Envuelve el contenido del Screen con una imagen de fondo estirada."""
     children = list(screen.children)
     for child in children:
         screen.remove_widget(child)
@@ -264,19 +248,16 @@ def add_background(screen, image_path):
     screen.add_widget(root)
 
 # ============================================================
-# MIXIN DE PERSISTENCIA  (usa ruta protegida en Android)
+# MIXIN DE PERSISTENCIA
 # ============================================================
 class DataMixin:
     def load_data(self):
         path = get_data_path(self.data_file)
-
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-
         except (FileNotFoundError, json.JSONDecodeError):
             return []
-
         except Exception as e:
             print(f"Error al cargar {self.data_file}: {e}")
             return []
@@ -284,30 +265,19 @@ class DataMixin:
     def save_data(self, data):
         path = get_data_path(self.data_file)
         temp_path = path + ".tmp"
-
         try:
-            # Guardado temporal seguro
             with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    data,
-                    f,
-                    indent=4,
-                    ensure_ascii=False
-                )
-
-            # Reemplazo seguro
+                json.dump(data, f, indent=4, ensure_ascii=False)
             os.replace(temp_path, path)
-
         except Exception as e:
             print(f"Error al guardar {self.data_file}: {e}")
 
 # ============================================================
-# MENÚ PRINCIPAL
+# MENU PRINCIPAL
 # ============================================================
 class MenuScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
         outer = FloatLayout()
         inner = BoxLayout(
             orientation="vertical",
@@ -330,7 +300,7 @@ class MenuScreen(Screen):
         title.bind(size=title.setter("text_size"))
 
         btn_med  = make_button("Recordatorios de Medicamentos")
-        btn_apt  = make_button("Citas Médicas")
+        btn_apt  = make_button("Citas Medicas")
         btn_help = make_button("Ayuda")
 
         btn_med.bind(on_press=lambda *_: setattr(self.manager, "current", "medications"))
@@ -356,7 +326,6 @@ class MedicationReminderScreen(DataMixin, Screen):
         self.medications = self.load_data()
         self._stop_flags = {}
 
-        # ScrollView para que quepa en pantallas pequeñas
         scroll = ScrollView(size_hint=(1, 1))
         layout = BoxLayout(
             orientation="vertical",
@@ -366,23 +335,22 @@ class MedicationReminderScreen(DataMixin, Screen):
         )
         layout.bind(minimum_height=layout.setter("height"))
 
-        # --- Barra superior ---
         top_bar = BoxLayout(size_hint_y=None, height=BTN_H, spacing=SPC)
-        btn_back = make_button("← Menú", size_hint_x=0.45)
+        btn_back = make_button("Menu", size_hint_x=0.45)
         btn_back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
-        btn_del = make_button("🗑 Borrar", size_hint_x=0.45)
+        btn_del = make_button("Borrar", size_hint_x=0.45)
         btn_del.bind(on_press=lambda *_: setattr(self.manager, "current", "delete_reminders"))
         top_bar.add_widget(btn_back)
         top_bar.add_widget(btn_del)
 
         self.med_name_input  = make_input("Nombre del medicamento")
         self.quantity_input  = make_input("Cantidad total de pastillas")
-        self.interval_input  = make_input("Cada cuántas horas (Ej: 8)")
-        self.start_time_input= make_input("Hora inicial 24H  (Ej: 14:30)")
-        self.days_input      = make_input("Días de tratamiento")
+        self.interval_input  = make_input("Cada cuantas horas (Ej: 8)")
+        self.start_time_input= make_input("Hora inicial 24H (Ej: 14:30)")
+        self.days_input      = make_input("Dias de tratamiento")
 
         chronic_row = BoxLayout(size_hint_y=None, height=BTN_H, spacing=SPC)
-        chronic_row.add_widget(make_label("Paciente crónico (365 días):"))
+        chronic_row.add_widget(make_label("Paciente cronico (365 dias):"))
         self.chronic_checkbox = CheckBox(size_hint_x=0.2)
         chronic_row.add_widget(self.chronic_checkbox)
 
@@ -400,7 +368,7 @@ class MedicationReminderScreen(DataMixin, Screen):
                   self.interval_input,
                   make_label("Hora de la primera dosis:"),
                   self.start_time_input,
-                  make_label("Días de tratamiento:"),
+                  make_label("Dias de tratamiento:"),
                   self.days_input,
                   chronic_row,
                   btn_set,
@@ -419,11 +387,11 @@ class MedicationReminderScreen(DataMixin, Screen):
             start_time     = datetime.strptime(self.start_time_input.text.strip(), "%H:%M")
             days           = 365 if self.chronic_checkbox.active else int(self.days_input.text)
         except ValueError:
-            self.status_label.text = "⚠ Por favor, ingrese valores válidos."
+            self.status_label.text = "Por favor, ingrese valores validos."
             return
 
         if not med_name or quantity <= 0 or interval_hours <= 0 or days <= 0:
-            self.status_label.text = "⚠ Complete todos los campos correctamente."
+            self.status_label.text = "Complete todos los campos correctamente."
             return
 
         doses_per_day = max(1, 24 // interval_hours)
@@ -431,9 +399,7 @@ class MedicationReminderScreen(DataMixin, Screen):
         meds_per_dose = max(1, quantity // total_doses)
 
         now = datetime.now()
-        start_datetime = now.replace(
-            hour=start_time.hour, minute=start_time.minute, second=0, microsecond=0
-        )
+        start_datetime = now.replace(hour=start_time.hour, minute=start_time.minute, second=0, microsecond=0)
         if start_datetime < now:
             start_datetime += timedelta(hours=interval_hours)
 
@@ -458,7 +424,7 @@ class MedicationReminderScreen(DataMixin, Screen):
             daemon=True,
         ).start()
 
-        self.status_label.text = f"✔ Recordatorios establecidos para {med_name}."
+        self.status_label.text = f"Recordatorios establecidos para {med_name}."
 
     def schedule_reminders(self, reminder_data, start_datetime, stop_event):
         med_name      = reminder_data["med_name"]
@@ -472,9 +438,7 @@ class MedicationReminderScreen(DataMixin, Screen):
             for _ in range(doses_per_day):
                 if stop_event.is_set():
                     return
-                # Registrar alarma exacta en Android (funciona con app cerrada)
                 self._schedule_medication_alarm(med_name, meds_per_dose, current_time)
-                # También usar sleep como respaldo mientras la app está abierta
                 wait_seconds = (current_time - datetime.now()).total_seconds()
                 if wait_seconds > 0:
                     deadline = time.monotonic() + wait_seconds
@@ -487,16 +451,14 @@ class MedicationReminderScreen(DataMixin, Screen):
                 current_time += timedelta(hours=interval_hours)
 
     def _push_medication(self, med_name, meds_per_dose, reminder_time):
-        """Push notification: 'Es hora de tomar tu medicamento: <nombre>'"""
         title   = "Es hora de tomar tu medicamento"
-        message = f"{med_name}  —  {meds_per_dose} unidad(es)  ({reminder_time.strftime('%H:%M')})"
+        message = f"{med_name} -- {meds_per_dose} unidad(es) ({reminder_time.strftime('%H:%M')})"
         send_notification(title, message)
         play_sound(SND_NOTIFICATION)
 
     def _schedule_medication_alarm(self, med_name, meds_per_dose, trigger_dt):
-        """Registra alarma exacta con AlarmManager (funciona con app cerrada)."""
         title   = "Es hora de tomar tu medicamento"
-        message = f"{med_name}  —  {meds_per_dose} unidad(es)  ({trigger_dt.strftime('%H:%M')})"
+        message = f"{med_name} -- {meds_per_dose} unidad(es) ({trigger_dt.strftime('%H:%M')})"
         epoch_ms = int(trigger_dt.timestamp() * 1000)
         schedule_alarm(epoch_ms, title, message)
 
@@ -514,7 +476,7 @@ class MedicationReminderScreen(DataMixin, Screen):
 
 
 # ============================================================
-# CITAS MÉDICAS
+# CITAS MEDICAS
 # ============================================================
 class MedicalAppointmentsScreen(DataMixin, Screen):
     def __init__(self, **kwargs):
@@ -531,18 +493,16 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         )
         layout.bind(minimum_height=layout.setter("height"))
 
-        # --- Barra superior ---
         top_bar = BoxLayout(size_hint_y=None, height=BTN_H, spacing=SPC)
-        btn_back = make_button("← Menú", size_hint_x=0.45)
+        btn_back = make_button("Menu", size_hint_x=0.45)
         btn_back.bind(on_press=lambda *_: setattr(self.manager, "current", "menu"))
-        btn_del = make_button("🗑 Borrar", size_hint_x=0.45)
+        btn_del = make_button("Borrar", size_hint_x=0.45)
         btn_del.bind(on_press=lambda *_: setattr(self.manager, "current", "delete_appointments"))
         top_bar.add_widget(btn_back)
         top_bar.add_widget(btn_del)
 
         self.name_input = make_input("Nombre de la cita")
 
-        # Hora: HH y MM en fila
         time_row = BoxLayout(size_hint_y=None, height=SPINNER_H, spacing=SPC)
         self.hour_spinner   = make_spinner("HH", [f"{i:02}" for i in range(24)], size_hint_x=0.45)
         self.minute_spinner = make_spinner("MM", [f"{i:02}" for i in range(0, 60, 5)], size_hint_x=0.45)
@@ -550,17 +510,16 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         time_row.add_widget(make_label(":", size_hint_x=0.1, halign="center"))
         time_row.add_widget(self.minute_spinner)
 
-        # Fecha en una sola fila compacta
         date_row = BoxLayout(size_hint_y=None, height=SPINNER_H, spacing=SPC)
         current_year = datetime.now().year
-        self.day_spinner   = make_spinner("Día",  [str(i) for i in range(1, 32)])
-        self.month_spinner = make_spinner("Mes",  [str(i) for i in range(1, 13)])
-        self.year_spinner  = make_spinner("Año",  [str(i) for i in range(current_year, current_year + 7)])
+        self.day_spinner   = make_spinner("Dia", [str(i) for i in range(1, 32)])
+        self.month_spinner = make_spinner("Mes", [str(i) for i in range(1, 13)])
+        self.year_spinner  = make_spinner("Ano", [str(i) for i in range(current_year, current_year + 7)])
         date_row.add_widget(self.day_spinner)
         date_row.add_widget(self.month_spinner)
         date_row.add_widget(self.year_spinner)
 
-        btn_set = make_button("Establecer Cita Médica")
+        btn_set = make_button("Establecer Cita Medica")
         btn_set.bind(on_press=self.set_appointment)
 
         self.status_label = make_label("Esperando datos...", color=(0.1, 0.4, 0.1, 1))
@@ -570,7 +529,7 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
                   self.name_input,
                   make_label("Hora de la cita (HH : MM):"),
                   time_row,
-                  make_label("Fecha  (Día / Mes / Año):"),
+                  make_label("Fecha (Dia / Mes / Ano):"),
                   date_row,
                   btn_set,
                   self.status_label]:
@@ -589,15 +548,15 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         year   = self.year_spinner.text
 
         if not name:
-            self.status_label.text = "⚠ Ingrese un nombre para la cita."
+            self.status_label.text = "Ingrese un nombre para la cita."
             return
-        if hour == "HH" or minute == "MM" or day == "Día" or month == "Mes" or year == "Año":
-            self.status_label.text = "⚠ Seleccione fecha y hora completas."
+        if hour == "HH" or minute == "MM" or day == "Dia" or month == "Mes" or year == "Ano":
+            self.status_label.text = "Seleccione fecha y hora completas."
             return
         try:
             apt_time = datetime.strptime(f"{day} {month} {year} {hour}:{minute}", "%d %m %Y %H:%M")
         except ValueError:
-            self.status_label.text = "⚠ Fecha inválida (ese mes no tiene ese día)."
+            self.status_label.text = "Fecha invalida (ese mes no tiene ese dia)."
             return
 
         data = {"name": name, "time": apt_time.strftime("%H:%M"),
@@ -605,15 +564,14 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         self.appointments.append(data)
         self.save_data(self.appointments)
 
-        self.status_label.text = f"✔ Cita '{name}' — {apt_time.strftime('%d/%m/%Y %H:%M')}."
+        self.status_label.text = f"Cita '{name}' -- {apt_time.strftime('%d/%m/%Y %H:%M')}."
 
-        # Reset
         self.name_input.text    = ""
         self.hour_spinner.text  = "HH"
         self.minute_spinner.text= "MM"
-        self.day_spinner.text   = "Día"
+        self.day_spinner.text   = "Dia"
         self.month_spinner.text = "Mes"
-        self.year_spinner.text  = "Año"
+        self.year_spinner.text  = "Ano"
 
         threading.Thread(
             target=self._schedule_alerts,
@@ -624,32 +582,23 @@ class MedicalAppointmentsScreen(DataMixin, Screen):
         self.manager.get_screen("delete_appointments").update_spinner_values()
 
     def _schedule_alerts(self, name, apt_time):
-        """
-        Push notifications anticipadas para citas:
-          - 1 día antes  → 'Tu cita <nombre> es mañana'
-          - 1 hora antes → 'Tu cita <nombre> es en 1 hora'
-          - En el momento → 'Es la hora de tu cita: <nombre>'
-        Registra alarmas exactas con AlarmManager (funciona con app cerrada).
-        """
         alerts = [
-            (apt_time - timedelta(days=1),  f"Tu cita {name} es mañana"),
+            (apt_time - timedelta(days=1),  f"Tu cita {name} es manana"),
             (apt_time - timedelta(hours=1), f"Tu cita {name} es en 1 hora"),
             (apt_time,                       f"Es la hora de tu cita: {name}"),
         ]
         for alert_time, msg in alerts:
             if alert_time <= datetime.now():
                 continue
-            # Alarma exacta (app cerrada / Doze mode)
             schedule_alarm(
                 int(alert_time.timestamp() * 1000),
-                "Recordatorio de Cita Médica",
+                "Recordatorio de Cita Medica",
                 msg,
             )
-            # Respaldo por sleep mientras la app sigue abierta
             wait = (alert_time - datetime.now()).total_seconds()
             if wait > 0:
                 time.sleep(wait)
-                send_notification("Recordatorio de Cita Médica", msg)
+                send_notification("Recordatorio de Cita Medica", msg)
                 play_sound(SND_NOTIFICATION)
 
     def _send_notification(self, title, message):
@@ -676,7 +625,7 @@ class HelpScreen(Screen):
         )
         info.bind(size=info.setter("text_size"))
 
-        btn_back = make_button("← Volver al Menú", size_hint=(0.6, None))
+        btn_back = make_button("Volver al Menu", size_hint=(0.6, None))
         btn_back.size_hint_y = None
         btn_back.height = BTN_H
         btn_back.pos_hint = {"center_x": 0.5, "y": 0.08}
@@ -704,23 +653,19 @@ class DeleteRemindersScreen(DataMixin, Screen):
             size_hint=(0.85, None),
         )
         layout.bind(minimum_height=layout.setter("height"))
-
         outer = FloatLayout()
         layout.pos_hint = {"center_x": 0.5, "center_y": 0.5}
 
         layout.add_widget(make_label("Selecciona el recordatorio a eliminar:"))
 
-        self.reminder_spinner = make_spinner(
-            "Seleccionar...",
-            self._build_reminder_labels(self.medications),
-        )
+        self.reminder_spinner = make_spinner("Seleccionar...", self._build_reminder_labels(self.medications))
         layout.add_widget(self.reminder_spinner)
 
-        btn_del = make_button("🗑  Eliminar Recordatorio")
+        btn_del = make_button("Eliminar Recordatorio")
         btn_del.bind(on_press=self.delete_reminder)
         layout.add_widget(btn_del)
 
-        btn_back = make_button("← Regresar")
+        btn_back = make_button("Regresar")
         btn_back.bind(on_press=lambda *_: setattr(self.manager, "current", "medications"))
         layout.add_widget(btn_back)
 
@@ -729,7 +674,6 @@ class DeleteRemindersScreen(DataMixin, Screen):
         add_background(self, BG_MEDICATIONS)
 
     def _build_reminder_labels(self, medications):
-        """Etiquetas con índice para eliminar solo el elemento exacto."""
         labels = ["Seleccionar..."]
         for i, r in enumerate(medications):
             labels.append(f"[{i}] {r['med_name']}")
@@ -772,23 +716,19 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
             size_hint=(0.85, None),
         )
         layout.bind(minimum_height=layout.setter("height"))
-
         outer = FloatLayout()
         layout.pos_hint = {"center_x": 0.5, "center_y": 0.5}
 
         layout.add_widget(make_label("Selecciona la cita a eliminar:"))
 
-        self.appointment_spinner = make_spinner(
-            "Seleccionar...",
-            self._build_appointment_labels(self.appointments),
-        )
+        self.appointment_spinner = make_spinner("Seleccionar...", self._build_appointment_labels(self.appointments))
         layout.add_widget(self.appointment_spinner)
 
-        btn_del = make_button("🗑  Eliminar Cita")
+        btn_del = make_button("Eliminar Cita")
         btn_del.bind(on_press=self.delete_appointment)
         layout.add_widget(btn_del)
 
-        btn_back = make_button("← Regresar")
+        btn_back = make_button("Regresar")
         btn_back.bind(on_press=lambda *_: setattr(self.manager, "current", "appointments"))
         layout.add_widget(btn_back)
 
@@ -797,17 +737,15 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
         add_background(self, BG_APPOINTMENTS)
 
     def _build_appointment_labels(self, appointments):
-        """Genera etiquetas únicas con índice para evitar borrado masivo por nombre duplicado."""
         labels = ["Seleccionar..."]
         for i, a in enumerate(appointments):
-            labels.append(f"[{i}] {a['name']} — {a['day']}/{a['month']} {a['year']} {a['time']}")
+            labels.append(f"[{i}] {a['name']} -- {a['day']}/{a['month']} {a['year']} {a['time']}")
         return labels
 
     def delete_appointment(self, instance):
         sel = self.appointment_spinner.text
         if sel not in ("Seleccionar...", ""):
             try:
-                # Extraer el índice numérico del inicio de la etiqueta "[i] ..."
                 idx = int(sel.split("]")[0].replace("[", "").strip())
                 self.appointments = self.load_data()
                 if 0 <= idx < len(self.appointments):
@@ -821,7 +759,6 @@ class DeleteAppointmentsScreen(DataMixin, Screen):
         self.appointments = self.load_data()
         self.appointment_spinner.values = self._build_appointment_labels(self.appointments)
         self.appointment_spinner.text = "Seleccionar..."
-
 
 
 # ============================================================
@@ -838,17 +775,17 @@ class ReminderApp(App):
         self.sm.add_widget(HelpScreen(name="help"))
         return self.sm
 
-   def on_start(self):
-    if ANDROID:
-        Clock.schedule_once(lambda dt: request_android_permissions(), 1)
-        Clock.schedule_once(lambda dt: self.reprogramar_alarmas_guardadas(), 2)
+    def on_start(self):
+        if ANDROID:
+            Clock.schedule_once(lambda dt: request_android_permissions(), 1)
+            Clock.schedule_once(lambda dt: self.reprogramar_alarmas_guardadas(), 2)
 
-def reprogramar_alarmas_guardadas(self):
-    try:
-        from utils import reprogramar_alarmas
-        reprogramar_alarmas()
-    except Exception as e:
-        print(f"[MAIN] Error al reprogramar alarmas: {e}")
+    def reprogramar_alarmas_guardadas(self):
+        try:
+            from utils import reprogramar_alarmas
+            reprogramar_alarmas()
+        except Exception as e:
+            print(f"[MAIN] Error al reprogramar alarmas: {e}")
 
 
 if __name__ == "__main__":
