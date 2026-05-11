@@ -42,7 +42,7 @@ jobs:
       - name: Instalar dependencias Python
         run: |
           python -m pip install --upgrade pip
-          pip install buildozer
+          pip install buildozer cython
 
       # ── 6. Android SDK ──────────────────────────────────────
       - name: Setup Android SDK
@@ -68,17 +68,17 @@ jobs:
                    bg_menu.png bg_medications.png bg_appointments.png \
                    sound_button.mp3 sound_notification.mp3; do
             if [ -f "$f" ]; then
-              echo " $f"
+              echo "$f"
             else
-              echo " $f — FALTA"
+              echo "$f — FALTA"
             fi
           done
           echo ""
           echo "=== Verificando BootReceiver.java ==="
           if [ -f "src/com/recordatorios/BootReceiver.java" ]; then
-            echo " src/com/recordatorios/BootReceiver.java"
+            echo "src/com/recordatorios/BootReceiver.java"
           else
-            echo " src/com/recordatorios/BootReceiver.java — FALTA"
+            echo "src/com/recordatorios/BootReceiver.java — FALTA"
           fi
 
       # ── 8. Compilar APK ─────────────────────────────────────
