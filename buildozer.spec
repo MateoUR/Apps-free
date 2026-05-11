@@ -11,15 +11,12 @@ source.include_patterns = bg_menu.png,bg_medications.png,bg_appointments.png,sou
 
 version = 1.0
 
-requirements = python3,kivy==2.3.0,plyer,pillow,pyjnius
+requirements = python3,kivy==2.3.1,plyer,pillow,pyjnius
 android.gradle_dependencies = androidx.core:core:1.12.0
 
 orientation = portrait
 icon.filename = %(source.dir)s/bg_menu.png
 
-# -------------------------------------------------------
-# Android
-# -------------------------------------------------------
 android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RECEIVE_BOOT_COMPLETED,SCHEDULE_EXACT_ALARM
 
 services = Recordatorio:service.py:foreground
@@ -28,7 +25,7 @@ android.add_src = src
 # foregroundServiceType para Android 14+
 android.foreground_service_type = dataSync
 
-# BootReceiver registrado directamente desde el spec
+# BootReceiver en el manifiesto
 android.extra_manifest_xml = \
     <receiver android:name="com.recordatorios.BootReceiver" \
               android:enabled="true" \
@@ -48,7 +45,7 @@ android.enable_androidx = True
 android.accept_sdk_license = True
 android.archs = arm64-v8a, armeabi-v7a
 
-# -------------------------------------------------------
 [buildozer]
+
 log_level = 2
 warn_on_root = 1
