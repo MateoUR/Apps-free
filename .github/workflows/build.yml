@@ -42,7 +42,7 @@ jobs:
       - name: Instalar dependencias Python
         run: |
           python -m pip install --upgrade pip
-          pip install buildozer cython==0.29.36
+          pip install buildozer
 
       # ── 6. Android SDK ──────────────────────────────────────
       - name: Setup Android SDK
@@ -51,12 +51,11 @@ jobs:
       - name: Aceptar licencias Android
         run: yes | sdkmanager --licenses
 
-      - name: Instalar Build Tools y NDK
+      - name: Instalar Build Tools
         run: |
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-34"
           sdkmanager "build-tools;34.0.0"
-          sdkmanager "ndk;25.2.9519653"
 
       # ── 7. Verificar estructura del proyecto ────────────────
       - name: Verificar archivos requeridos
@@ -82,12 +81,11 @@ jobs:
             echo " src/com/recordatorios/BootReceiver.java — FALTA"
           fi
 
-      # ── 8. Compilación única con Buildozer ─────────────────
+      # ── 8. Compilar APK ─────────────────────────────────────
       - name: Compilar APK
         env:
           ANDROIDSDK: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
         run: buildozer android debug
 
       # ── 9. Subir APK como artefacto ────────────────────────
