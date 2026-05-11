@@ -22,9 +22,6 @@ android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RE
 services = Recordatorio:service.py:foreground
 android.add_src = src
 
-# Ruta al archivo XML con el BootReceiver y foregroundServiceType
-android.extra_manifest_xml = extra_manifest.xml
-
 android.api = 34
 android.minapi = 26
 android.sdk = 34
