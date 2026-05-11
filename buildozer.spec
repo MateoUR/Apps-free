@@ -22,19 +22,8 @@ android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE,VIBRATE,WAKE_LOCK,RE
 services = Recordatorio:service.py:foreground
 android.add_src = src
 
-# foregroundServiceType para Android 14+
-android.foreground_service_type = dataSync
-
-# BootReceiver en el manifiesto
-android.extra_manifest_xml = \
-    <receiver android:name="com.recordatorios.BootReceiver" \
-              android:enabled="true" \
-              android:exported="true"> \
-        <intent-filter> \
-            <action android:name="android.intent.action.BOOT_COMPLETED" /> \
-            <action android:name="android.intent.action.QUICKBOOT_POWERON" /> \
-        </intent-filter> \
-    </receiver>
+# XML en una sola línea: incluye el BootReceiver y el foregroundServiceType para el PythonService
+android.extra_manifest_xml = <receiver android:name="com.recordatorios.BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.QUICKBOOT_POWERON"/></intent-filter></receiver><service android:name="org.kivy.android.PythonService" android:foregroundServiceType="dataSync"/>
 
 android.api = 34
 android.minapi = 26
